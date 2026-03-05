@@ -1,4 +1,4 @@
-# Solana Copy Trading Platform
+# Copy Trading Platform
 
 A comprehensive social trading platform built for Solana that allows users to track top-performing wallets and automatically copy their trades. Built with Next.js, TypeScript, and Privy for authentication.
 
