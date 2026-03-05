@@ -1,41 +1,315 @@
-{
-  "name": "copy-trading-social-media",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@privy-io/react-auth": "^3.3.0",
-    "@privy-io/server-auth": "^1.32.5",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-dropdown-menu": "^2.1.16",
-    "@radix-ui/react-tabs": "^1.1.13",
-    "@radix-ui/react-toast": "^1.2.15",
-    "@solana/spl-token": "^0.4.14",
-    "@solana/web3.js": "^1.98.4",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "date-fns": "^4.1.0",
-    "lucide-react": "^0.545.0",
-    "next": "15.5.4",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "recharts": "^3.2.1",
-    "tailwind-merge": "^3.3.1"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.4",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth';
+import { walletTracker } from '@/lib/wallet-tracker';
+import { copyTradingEngine } from '@/lib/copy-trading';
+import { WalletPerformance, WalletRanking } from '@/lib/wallet-tracker';
+import { CopyTrade, TradingSignal } from '@/lib/copy-trading';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, TrendingDown, Users, Activity, Copy, AlertCircle } from 'lucide-react';
+
+interface DashboardStats {
+  totalWallets: number;
+  activeWallets: number;
+  totalTrades: number;
+  successfulTrades: number;
+  totalVolume: number;
+  averageReturn: number;
+}
+
+export default function Dashboard() {
+  const { userProfile, authenticated, connectWallet } = useAuth();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [topWallets, setTopWallets] = useState<WalletRanking[]>([]);
+  const [recentSignals, setRecentSignals] = useState<TradingSignal[]>([]);
+  const [activeCopyTrades, setActiveCopyTrades] = useState<CopyTrade[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (authenticated && userProfile) {
+      loadDashboardData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [authenticated, userProfile]);
+
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Load wallet statistics
+      const walletStats = walletTracker.getStatistics();
+      const topWalletsData = walletTracker.getTopWallets(5);
+      
+      // Load copy trading statistics
+      const copyTradingStats = copyTradingEngine.getCopyTradingStats();
+      
+      // Load recent signals and active trades
+      const signals = copyTradingEngine.getTradingSignals(userProfile?.walletAddress);
+      const trades = copyTradingEngine.getActiveCopyTrades(userProfile?.walletAddress || '');
+      
+      setStats({
+        totalWallets: walletStats.totalWallets,
+        activeWallets: walletStats.activeWallets,
+        totalTrades: copyTradingStats.totalTrades,
+        successfulTrades: copyTradingStats.successfulTrades,
+        totalVolume: copyTradingStats.totalVolume,
+        averageReturn: copyTradingStats.averageReturn,
+      });
+      
+      setTopWallets(topWalletsData);
+      setRecentSignals(signals.slice(0, 5));
+      setActiveCopyTrades(trades.slice(0, 5));
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-white mb-4">
+            Solana Copy Trading Platform
+          </h1>
+          <p className="text-xl text-gray-300 mb-8">
+            Track top performers and copy their trades automatically
+          </p>
+          <Button 
+            onClick={connectWallet}
+            size="lg"
+            className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 text-lg"
+          >
+            Connect Wallet
+          </Button>
+        </div>
+      </div>
+    );
   }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white">
+      {/* Header */}
+      <header className="bg-slate-800 border-b border-slate-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div>
+              <h1 className="text-2xl font-bold">Copy Trading Dashboard</h1>
+              <p className="text-gray-400">
+                Welcome back, {userProfile?.displayName || 'Trader'}
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-400">
+                {userProfile?.walletAddress?.slice(0, 6)}...{userProfile?.walletAddress?.slice(-4)}
+              </div>
+              <div className={`px-3 py-1 rounded-full text-sm ${
+                userProfile?.copyTradingEnabled 
+                  ? 'bg-green-900 text-green-300' 
+                  : 'bg-yellow-900 text-yellow-300'
+              }`}>
+                {userProfile?.copyTradingEnabled ? 'Copy Trading Active' : 'Copy Trading Disabled'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center">
+              <Users className="h-8 w-8 text-blue-400" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-400">Tracked Wallets</p>
+                <p className="text-2xl font-bold text-white">{stats?.totalWallets || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center">
+              <Activity className="h-8 w-8 text-green-400" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-400">Active Wallets</p>
+                <p className="text-2xl font-bold text-white">{stats?.activeWallets || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center">
+              <Copy className="h-8 w-8 text-purple-400" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-400">Copy Trades</p>
+                <p className="text-2xl font-bold text-white">{stats?.totalTrades || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center">
+              {stats && stats.averageReturn >= 0 ? (
+                <TrendingUp className="h-8 w-8 text-green-400" />
+              ) : (
+                <TrendingDown className="h-8 w-8 text-red-400" />
+              )}
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-400">Success Rate</p>
+                <p className="text-2xl font-bold text-white">
+                  {stats?.averageReturn.toFixed(1) || 0}%
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Top Performing Wallets */}
+          <div className="bg-slate-800 rounded-lg border border-slate-700">
+            <div className="p-6 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">Top Performing Wallets</h2>
+              <p className="text-gray-400 text-sm">Ranked by performance score</p>
+            </div>
+            <div className="p-6">
+              {topWallets.length > 0 ? (
+                <div className="space-y-4">
+                  {topWallets.map((wallet, index) => (
+                    <div key={wallet.address} className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-sm font-bold">
+                          {wallet.rank}
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-white font-medium">
+                            {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+                          </p>
+                          <p className="text-gray-400 text-sm">
+                            Score: {wallet.score.toFixed(1)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-green-400 font-medium">
+                          +{wallet.metrics.pnlPercentage.toFixed(1)}%
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          {wallet.metrics.totalTrades} trades
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-400">No tracked wallets yet</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Trading Signals */}
+          <div className="bg-slate-800 rounded-lg border border-slate-700">
+            <div className="p-6 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">Recent Trading Signals</h2>
+              <p className="text-gray-400 text-sm">Latest opportunities from top wallets</p>
+            </div>
+            <div className="p-6">
+              {recentSignals.length > 0 ? (
+                <div className="space-y-4">
+                  {recentSignals.map((signal) => (
+                    <div key={signal.id} className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+                      <div className="flex items-center">
+                        <div className={`w-3 h-3 rounded-full ${
+                          signal.riskLevel === 'low' ? 'bg-green-400' :
+                          signal.riskLevel === 'medium' ? 'bg-yellow-400' : 'bg-red-400'
+                        }`} />
+                        <div className="ml-3">
+                          <p className="text-white font-medium">
+                            {signal.transaction.tokenIn} → {signal.transaction.tokenOut}
+                          </p>
+                          <p className="text-gray-400 text-sm">
+                            Confidence: {signal.confidence.toFixed(0)}%
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-purple-400 font-medium">
+                          {signal.signalStrength.toFixed(0)}%
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          {signal.riskLevel} risk
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-400">No recent signals</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Active Copy Trades */}
+        {activeCopyTrades.length > 0 && (
+          <div className="mt-8 bg-slate-800 rounded-lg border border-slate-700">
+            <div className="p-6 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">Active Copy Trades</h2>
+              <p className="text-gray-400 text-sm">Your current copy trading positions</p>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {activeCopyTrades.map((trade) => (
+                  <div key={trade.id} className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+                    <div className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full ${
+                        trade.status === 'executed' ? 'bg-green-400' :
+                        trade.status === 'failed' ? 'bg-red-400' : 'bg-yellow-400'
+                      }`} />
+                      <div className="ml-3">
+                        <p className="text-white font-medium">
+                          {trade.tokenIn} → {trade.tokenOut}
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          Amount: {trade.amount.toFixed(4)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-medium ${
+                        trade.status === 'executed' ? 'text-green-400' :
+                        trade.status === 'failed' ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {trade.status.charAt(0).toUpperCase() + trade.status.slice(1)}
+                      </p>
+                      <p className="text-gray-400 text-sm">
+                        {new Date(trade.executedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
